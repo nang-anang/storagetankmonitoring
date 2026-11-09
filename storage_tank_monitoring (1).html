@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage Tank Monitoring</title>
+<style>
+:root{--bg:#f4f7fb;--panel:#fff;--ink:#172033;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#15803d;--yellow:#b45309;--red:#b91c1c;--shadow:0 8px 24px rgba(15,23,42,.06)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{background:#10213b;color:#fff;padding:24px clamp(16px,4vw,42px)}header .sub{color:#bdcbe0;margin-top:5px}
+main{max-width:1400px;margin:auto;padding:22px clamp(12px,3vw,30px) 48px}
+h1{font-size:clamp(22px,3vw,30px);margin:0}h2{font-size:18px;margin:0 0 14px}.muted{color:var(--muted)}.small{font-size:12px}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 18px}
+button,.file-label{border:0;border-radius:9px;padding:10px 14px;font-weight:650;cursor:pointer;background:var(--blue);color:white}
+button.secondary,.file-label{background:#e8eef8;color:#1e3a5f}button.danger{background:#fee2e2;color:#991b1b}button:hover,.file-label:hover{filter:brightness(.97)}
+input,select{font:inherit;border:1px solid #cbd5e1;border-radius:8px;padding:8px 9px;background:#fff;color:var(--ink);width:100%;min-width:0}
+input:focus,select:focus{outline:2px solid #bfdbfe;border-color:var(--blue)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.kpi,.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.kpi{padding:15px}.kpi .label{color:var(--muted);font-size:12px}.kpi strong{display:block;font-size:25px;margin-top:5px;font-variant-numeric:tabular-nums}
+.panel{padding:17px;margin-bottom:18px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:800px}th,td{text-align:left;padding:10px 9px;border-bottom:1px solid var(--line);vertical-align:middle}th{font-size:12px;color:var(--muted);font-weight:700;background:#f8fafc}td input,td select{min-width:85px}
+.tank-name{font-weight:750}.product{min-width:130px}.num{font-variant-numeric:tabular-nums;white-space:nowrap}.bar{height:9px;border-radius:20px;background:#e8edf4;overflow:hidden;min-width:90px}.bar span{height:100%;display:block;border-radius:20px;background:#16a34a}.bar.warn span{background:#eab308}.bar.over span{background:#dc2626}
+.status{font-size:11px;font-weight:750;border-radius:20px;padding:4px 8px;display:inline-block;white-space:nowrap}.ok{background:#dcfce7;color:#166534}.warn{background:#fef3c7;color:#92400e}.over{background:#fee2e2;color:#991b1b}
+.incoming-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr .7fr auto;gap:10px;align-items:end}
+.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px;font-weight:650}
+.note{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:11px 13px;border-radius:10px;margin-bottom:15px}
+.actions{display:flex;gap:7px;flex-wrap:wrap}.empty{text-align:center;color:var(--muted);padding:22px}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:22px}
+@media(max-width:850px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.incoming-grid{grid-template-columns:1fr 1fr}.incoming-grid button{grid-column:span 2}}
+@media(max-width:480px){.kpis{grid-template-columns:1fr 1fr}.kpi strong{font-size:21px}.incoming-grid{grid-template-columns:1fr}.incoming-grid button{grid-column:auto}}
+</style>
+</head>
+<body>
+<header><h1>Storage Tank Monitoring</h1><div class="sub">Monitoring kapasitas, existing stock, dan simulasi incoming per tangki</div></header>
+<main>
+  <div class="toolbar">
+    <button id="exportBtn">Export Excel (CSV)</button>
+    <button class="secondary" id="exportJsonBtn">Backup Data</button>
+    <label class="file-label" for="importFile">Import Backup</label><input id="importFile" type="file" accept=".json" hidden>
+    <button class="danger" id="resetBtn">Reset Data</button>
+  </div>
+  <div class="note"><b>Petunjuk:</b> Isi kolom Existing Stock sesuai kondisi aktual. Tambahkan incoming melalui form di bawah dan pilih tangki tujuan secara manual. Data tersimpan otomatis di browser/perangkat ini.</div>
+  <section class="kpis">
+    <div class="kpi"><div class="label">Total Capacity</div><strong id="totalCap">700.00 MT</strong></div>
+    <div class="kpi"><div class="label">Existing Stock</div><strong id="totalStock">0.00 MT</strong></div>
+    <div class="kpi"><div class="label">Total Incoming Plan</div><strong id="totalIncoming">0.00 MT</strong></div>
+    <div class="kpi"><div class="label">Remaining After Incoming</div><strong id="totalRemain">700.00 MT</strong></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Tank Overview & Master Data</h2><span class="muted small">Warning threshold: 85%</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Tank</th><th>Product</th><th>Capacity (MT)</th><th>Existing Stock (MT)</th><th>Incoming (MT)</th><th>Remaining (MT)</th><th>Utilization</th><th>Status</th></tr></thead>
+      <tbody id="tankRows"></tbody>
+    </table></div>
+    <p class="muted small">Nama produk dan kapasitas dapat diedit. Remaining dihitung dari kapasitas − existing stock − incoming. Nilai awal existing stock dan incoming adalah 0 MT karena data aktual belum diberikan.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Ringkasan per Produk</h2><span class="muted small">Dikelompokkan otomatis berdasarkan nama produk pada tiap tangki</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Product</th><th>Tangki</th><th>Total Capacity (MT)</th><th>Existing Stock (MT)</th><th>Incoming (MT)</th><th>Remaining (MT)</th><th>Utilization</th><th>Status</th></tr></thead>
+      <tbody id="summaryRows"></tbody>
+    </table></div>
+    <p class="muted small">Remaining per produk adalah total sisa ruang seluruh tangki produk tersebut. Perhatikan tabel per tangki untuk memastikan tidak ada tangki individual yang over capacity.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Incoming Planning — Manual per Tangki</h2>
+    <div class="incoming-grid">
+      <div class="field"><label for="inProduct">Product</label><input id="inProduct" list="products" placeholder="Contoh: SN150GII"><datalist id="products"></datalist></div>
+      <div class="field"><label for="inTank">Destination Tank</label><select id="inTank"></select></div>
+      <div class="field"><label for="inQty">Incoming Quantity (MT)</label><input id="inQty" type="number" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="field"><label for="inRef">Reference (optional)</label><input id="inRef" placeholder="PO / Vessel"></div>
+      <button id="addIncoming">Add Incoming</button>
+    </div>
+    <p class="muted small">Produk incoming harus sesuai dengan produk yang sedang terdaftar pada tangki tujuan. Ubah master produk tangki terlebih dahulu jika diperlukan.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Product</th><th>Tank</th><th>Quantity (MT)</th><th>Reference</th><th>Action</th></tr></thead>
+      <tbody id="incomingRows"></tbody>
+    </table></div>
+  </section>
+  <footer>Storage Tank Monitoring • Threshold warning 85% • Satuan kapasitas dan stok: MT</footer>
+</main>
+<script>
+const defaults=[
+ {id:"K1",product:"SN150GII",capacity:85,stock:0},
+ {id:"K2",product:"SN150GII",capacity:85,stock:0},
+ {id:"K3",product:"SN150GII",capacity:85,stock:0},
+ {id:"K4",product:"D145",capacity:85,stock:0},
+ {id:"T2",product:"SN150GII",capacity:180,stock:0},
+ {id:"T32",product:"SN500GII",capacity:45,stock:0},
+ {id:"T40",product:"SN150GII",capacity:45,stock:0},
+ {id:"T37",product:"BS150",capacity:45,stock:0},
+ {id:"T47",product:"70N",capacity:45,stock:0},
+ {id:"T74",product:"70N",capacity:45,stock:0}
+];
+const KEY="storageTankMonitoring_v1";
+let state=load();
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x&&Array.isArray(x.tanks)&&Array.isArray(x.incoming))return x}catch(e){}return {tanks:structuredClone(defaults),incoming:[]}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+const fmt=n=>(Number(n)||0).toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const incomingFor=id=>state.incoming.filter(x=>x.tank===id).reduce((a,x)=>a+Number(x.qty),0);
+function metrics(t){const inc=incomingFor(t.id),remain=Number(t.capacity)-Number(t.stock)-inc,used=Number(t.stock)+inc,pct=Number(t.capacity)>0?used/Number(t.capacity)*100:0;return {inc,remain,pct,used}}
+function productSummary(){
+ const g=new Map();
+ state.tanks.forEach(t=>{const key=(t.product||"-").trim().toUpperCase()||"-",m=metrics(t);let o=g.get(key);if(!o){o={product:(t.product||"-").trim()||"-",tanks:[],cap:0,stock:0,inc:0};g.set(key,o)}o.tanks.push(t.id);o.cap+=Number(t.capacity)||0;o.stock+=Number(t.stock)||0;o.inc+=m.inc});
+ return [...g.values()].map(o=>({...o,remain:o.cap-o.stock-o.inc,pct:o.cap>0?(o.stock+o.inc)/o.cap*100:0}));
+}
+function renderSummary(){
+ document.getElementById("summaryRows").innerHTML=productSummary().map(o=>{const over=o.remain<0,warn=!over&&o.pct>=85,cls=over?"over":warn?"warn":"ok",label=over?"OVER CAPACITY":warn?"NEAR FULL":"AVAILABLE";
+ return `<tr><td class="tank-name">${esc(o.product)}</td><td class="small">${o.tanks.map(esc).join(", ")} <span class="muted">(${o.tanks.length})</span></td><td class="num">${fmt(o.cap)}</td><td class="num">${fmt(o.stock)}</td><td class="num">${fmt(o.inc)}</td><td class="num" style="font-weight:750;color:${over?'var(--red)':'inherit'}">${fmt(o.remain)}</td><td><div class="bar ${cls}"><span style="width:${Math.max(0,Math.min(100,o.pct))}%"></span></div><div class="small muted">${fmt(o.pct)}%</div></td><td><span class="status ${cls}">${label}</span></td></tr>`}).join("");
+}
+function render(){
+ const totalCap=state.tanks.reduce((a,t)=>a+Number(t.capacity||0),0),stock=state.tanks.reduce((a,t)=>a+Number(t.stock||0),0),inc=state.incoming.reduce((a,x)=>a+Number(x.qty||0),0);
+ document.getElementById("totalCap").textContent=fmt(totalCap)+" MT";
+ document.getElementById("totalStock").textContent=fmt(stock)+" MT";
+ document.getElementById("totalIncoming").textContent=fmt(inc)+" MT";
+ document.getElementById("totalRemain").textContent=fmt(totalCap-stock-inc)+" MT";
+ document.getElementById("tankRows").innerHTML=state.tanks.map((t,i)=>{const m=metrics(t),over=m.remain<0,warn=!over&&m.pct>=85,cls=over?"over":warn?"warn":"ok",label=over?"OVER CAPACITY":warn?"NEAR FULL":"AVAILABLE";
+ return `<tr><td class="tank-name">${esc(t.id)}</td><td><input class="product" data-i="${i}" data-k="product" value="${esc(t.product)}"></td><td><input type="number" min="0" step=".01" data-i="${i}" data-k="capacity" value="${t.capacity}"></td><td><input type="number" min="0" step=".01" data-i="${i}" data-k="stock" value="${t.stock}"></td><td class="num">${fmt(m.inc)}</td><td class="num" style="font-weight:750;color:${over?'var(--red)': 'inherit'}">${fmt(m.remain)}</td><td><div class="bar ${cls}"><span style="width:${Math.max(0,Math.min(100,m.pct))}%"></span></div><div class="small muted">${fmt(m.pct)}%</div></td><td><span class="status ${cls}">${label}</span></td></tr>`}).join("");
+ document.querySelectorAll("#tankRows input").forEach(el=>el.addEventListener("change",e=>{const t=state.tanks[+e.target.dataset.i],k=e.target.dataset.k;if(k==="product")t.product=e.target.value.trim();else t[k]=Math.max(0,Number(e.target.value)||0);save();render()}));
+ renderSummary();
+ document.getElementById("inTank").innerHTML=state.tanks.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} — ${esc(t.product)}</option>`).join("");
+ document.getElementById("products").innerHTML=[...new Set(state.tanks.map(t=>t.product))].map(p=>`<option value="${esc(p)}">`).join("");
+ document.getElementById("incomingRows").innerHTML=state.incoming.length?state.incoming.map((x,i)=>`<tr><td>${esc(x.product)}</td><td>${esc(x.tank)}</td><td>${fmt(x.qty)}</td><td>${esc(x.ref||"—")}</td><td><button class="danger" data-del="${i}">Remove</button></td></tr>`).join(""):'<tr><td colspan="5" class="empty">Belum ada rencana incoming.</td></tr>';
+ document.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{state.incoming.splice(+b.dataset.del,1);save();render()}));
+}
+document.getElementById("addIncoming").addEventListener("click",()=>{
+ const product=document.getElementById("inProduct").value.trim(),tank=document.getElementById("inTank").value,qty=Number(document.getElementById("inQty").value),ref=document.getElementById("inRef").value.trim(),t=state.tanks.find(x=>x.id===tank);
+ if(!product||!t||!Number.isFinite(qty)||qty<=0){alert("Isi product, pilih tangki, dan masukkan quantity lebih dari 0.");return}
+ if(product.toLowerCase()!==t.product.toLowerCase()){alert("Produk incoming ("+product+") tidak sesuai dengan produk tangki "+tank+" ("+t.product+"). Ubah master produk tangki jika memang akan digunakan untuk produk tersebut.");return}
+ if(metrics(t).remain-qty<0){if(!confirm("Incoming ini akan membuat tangki "+tank+" melebihi kapasitas sebesar "+fmt(-(metrics(t).remain-qty))+" MT. Tetap tambahkan sebagai simulasi?"))return}
+ state.incoming.push({product,tank,qty,ref});document.getElementById("inQty").value="";document.getElementById("inRef").value="";save();render();
+});
+document.getElementById("exportBtn").addEventListener("click",()=>{
+ const rows=[["Tank","Product","Capacity MT","Existing Stock MT","Incoming MT","Remaining MT","Utilization %","Status"]];
+ state.tanks.forEach(t=>{const m=metrics(t),status=m.remain<0?"OVER CAPACITY":m.pct>=85?"NEAR FULL":"AVAILABLE";rows.push([t.id,t.product,t.capacity,t.stock,m.inc,m.remain,m.pct.toFixed(2),status])});
+ rows.push([],["PRODUCT SUMMARY"],["Product","Tanks","Total Capacity MT","Existing Stock MT","Incoming MT","Remaining MT","Utilization %","Status"],...productSummary().map(o=>[o.product,o.tanks.join(" "),o.cap,o.stock,o.inc,o.remain,o.pct.toFixed(2),o.remain<0?"OVER CAPACITY":o.pct>=85?"NEAR FULL":"AVAILABLE"]));
+ rows.push([],["INCOMING PLAN"],["Product","Tank","Quantity MT","Reference"],...state.incoming.map(x=>[x.product,x.tank,x.qty,x.ref]));
+ const csv="\uFEFF"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="storage-tank-monitoring.csv";a.click();URL.revokeObjectURL(a.href)
+});
+document.getElementById("exportJsonBtn").addEventListener("click",()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download="storage-tank-backup.json";a.click();URL.revokeObjectURL(a.href)});
+document.getElementById("importFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!Array.isArray(x.tanks)||!Array.isArray(x.incoming))throw Error();state=x;save();render();alert("Backup berhasil diimpor.")}catch(err){alert("File backup tidak valid.")}e.target.value=""});
+document.getElementById("resetBtn").addEventListener("click",()=>{if(confirm("Reset semua perubahan, existing stock, dan incoming ke data awal?")){state={tanks:structuredClone(defaults),incoming:[]};save();render()}});
+render();
+</script>
+</body>
+</html>
